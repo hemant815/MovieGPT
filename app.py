@@ -4,7 +4,7 @@ from sentence_transformers import SentenceTransformer
 import faiss
 
 df = pd.read_csv('movie.csv')
-df = df[['original_title','overview','genres','tagline','keywords','directors','cast','poster_path','status','spoken_languages','averageRating']]
+df = df[['original_title','overview','genres','keywords','directors','cast','poster_path','spoken_languages','averageRating']]
 
 st.set_page_config(
     page_title="MovieGPT",
@@ -13,53 +13,34 @@ st.set_page_config(
 )
 
 st.title("🎬 MovieGPT")
-st.caption(
-    "RAG-Powered Movie Recommendation System"
-)
+st.caption("RAG-Powered Movie Recommendation System")
 
 @st.cache_data
 def create_documents(df):
-
     documents = []
-
     for _, row in df.iterrows():
-
         doc = f"""
         Genres: {row['genres']}
-
-        Keywords:
-        {row['keywords']}
-
-        Overview:
-        {row['overview']}
-
-        Director:
-        {row['directors']}
-
-        Cast:
-        {row['cast']}
+        Keywords:{row['keywords']}
+        Overview:{row['overview']}
+        Director:{row['directors']}
+        Cast:{row['cast']}
         """
-
         documents.append(doc)
 
     return documents
 document = create_documents(df)
 @st.cache_data
 def create_metadata(df):
-
     metadata = []
-
     for _, row in df.iterrows():
-
         metadata.append({
             'Title': row['original_title'],
             'overview': row['overview'],
             'genres': row['genres'],
             'directors': row['directors'],
-            'cast': row['cast'],
             'poster_url':
                 "https://image.tmdb.org/t/p/w500" + row['poster_path'],
-            'Status': row['status'],
             'Language': row['spoken_languages'],
             'IMDB': row['averageRating']
         })
@@ -78,10 +59,14 @@ model = load_model()
 def create_embedding(document):
     return model.encode(document,normalize_embeddings=True).astype("float32")
 
+@st.cache_resource
+def create_index(movie_embedding):
+    index = faiss.IndexFlatIP(movie_embedding.shape[1])
+    index.add(movie_embedding)
+    return index
+
 movie_embedding = create_embedding(document)
-dimension = movie_embedding.shape[1]
-index = faiss.IndexFlatIP(dimension)
-index.add(movie_embedding)
+index = create_index(movie_embedding)
 
 
 query = st.text_input(
@@ -101,18 +86,8 @@ if query and button:
     query_embedding.reshape(1,-1),
         k=10
     )
-    retrieved_movies = [metadata[idx] for idx in indices[0] if idx < len(metadata)]
+    retrieved_movies = [metadata[idx] for idx in indices[0]]
 
-    context = "\n\n".join(
-        f"""
-    Title: {movie['Title']}
-    Genres: {movie['genres']}
- 
-    Director: {movie['directors']}
-    Overview: {movie['overview']}
-    """
-        for movie in retrieved_movies
-    )
     st.subheader("Recommended Movies")
 
     for movie in retrieved_movies:
@@ -124,23 +99,10 @@ if query and button:
                 st.image(movie['poster_url'], width=200)
 
             with col2:
-
                 st.subheader(movie['Title'])
-
                 st.write(movie['overview'])
-
-                st.write(
-                    f"🎭 Genres : {movie['genres']}"
-                )
-
-                st.write(
-                    f"🎬 Director : {movie['directors']}"
-                )
-
-                st.write(
-                    f"🌎 Language : {movie['Language']}"
-                )
-
-                st.write(
-                    f"⭐ IMDB : {movie['IMDB']}"
-                )
+                st.write(f"🎭 Genres : {movie['genres']}")
+                st.write(f"🎬 Director : {movie['directors']}")
+                st.write(f"🌎 Language : {movie['Language']}")
+                st.write(f"⭐ IMDB : {movie['IMDB']}")
+            
